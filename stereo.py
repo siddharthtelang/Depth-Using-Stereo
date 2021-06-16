@@ -64,3 +64,11 @@ def getFundamentalMatrix(src, dst):
         return F
     else:
         return None
+
+def calculateError(x1, x2, F):
+    # make x1 and x2 3*3
+    x1_ = np.array([x1[0], x1[1], 1])
+    x2_ = np.array([x2[0], x2[1], 1])
+    #calculate the error, the ideal case should be zero for the below product
+    error = np.dot(x2_.T, np.dot(F, x1_))
+    return np.abs(error)
