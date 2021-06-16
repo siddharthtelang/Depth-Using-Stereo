@@ -4,8 +4,11 @@ In this project we calculate the depth using Stereo vision, given two images fro
 ## How to run the code:
 Run as:
 	python3 stereo.py -dataset 1 -path 'DataSets/Dataset 1'
+	
 	python3 stereo.py -dataset 2 -path 'DataSets/Dataset 2'
+	
 	python3 stereo.py -dataset 3 -path 'DataSets/Dataset 3'
+	
 	(the path argument should contain the complete end path to the two images)
 
 ## Output images:
