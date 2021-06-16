@@ -175,3 +175,59 @@ def getCorrectPose(pts_3D, R1, T1, R2, T2):
         index = np.where(zArray > threshold)
 
     return index
+
+def getEpipolarLines(src_final, dst_final, F, im1_epipolar, im2_epipolar, rectified=False):
+    lines1, lines2 = [], []
+    for i in range(len(src_final)):
+        #arrange the source and destination points in a 3*3 array to be multiplied with F
+        x1 = np.array([src_final[i,0], src_final[i,1], 1]).reshape(3,1)
+        x2 = np.array([dst_final[i,0], dst_final[i,1], 1]).reshape(3,1)
+
+        #epipolar line 1 coefficients - left image
+        line1 = np.dot(F.T, x2)
+        lines1.append(line1)
+
+        #epipolar line 2 coefficients - right image
+        line2 = np.dot(F, x1)
+        lines2.append(line2)
+
+        if (not rectified):
+            #get the x and y values - lines are not parallel to x axis
+            x1_low = 0
+            x1_high = im1_epipolar.shape[1] - 1
+            y1_low = -(line1[2] + x1_low*line1[0])/line1[1]
+            y1_high = -(line1[2] + x1_high*line1[0])/line1[1]
+
+            x2_low = 0
+            x2_high = im2_epipolar.shape[1] - 1
+            y2_low = -(line2[2] + x2_low*line2[0])/line2[1]
+            y2_high = -(line2[2] + x2_high*line2[0])/line2[1]
+        
+        else:
+            # as the lines are parallel to the X axis, the slope tends to zero
+            x1_low = 0
+            x1_high = im1_epipolar.shape[1] - 1
+            y1_low = -(line1[2]/line1[1])
+            y1_high = y1_low
+
+            x2_low = 0
+            x2_high = im2_epipolar.shape[1] - 1
+            y2_low = -(line2[2]/line2[1])
+            y2_high = y2_low
+
+        #print the points onto image
+        cv2.circle(im1_epipolar, (int(src_final[i,0]), int(src_final[i,1])), 5, (0,0,255), 2)
+        im1_epipolar = cv2.line(im1_epipolar, (int(x1_low), int(y1_low)), (int(x1_high), int(y1_high)), (0,255,0), 1)
+
+        cv2.circle(im2_epipolar, (int(dst_final[i,0]), int(dst_final[i,1])), 5, (0,0,255), 2)
+        im2_epipolar = cv2.line(im2_epipolar, (int(x2_low), int(y2_low)), (int(x2_high), int(y2_high)), (0,255,0), 1)
+
+    combined = np.concatenate((im1_epipolar, im2_epipolar), axis=1)
+    # temp = cv2.resize(combined, (1200,700))
+    # cv2.imshow('epilines', temp)
+    # cv2.imwrite('Epilines_.png', combined)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    return lines1, lines2, combined
+
