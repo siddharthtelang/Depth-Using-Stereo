@@ -2,7 +2,8 @@
 In this project we calculate the depth using Stereo vision, given two images from a camera captured at different poses
 
 ## How to run the code:
-Run as:
+	Run as:
+	
 	python3 stereo.py -dataset 1 -path 'DataSets/Dataset 1'
 	
 	python3 stereo.py -dataset 2 -path 'DataSets/Dataset 2'
