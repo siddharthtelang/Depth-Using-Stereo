@@ -109,3 +109,25 @@ def getEssentialMatrix(F, K1, K2):
     S = np.diag([1,1,0])
     E = np.dot(U, np.dot(S, VT))
     return E
+
+#https://cmsc733.github.io/2019/proj/p3/
+def getCameraPose(E):
+    U, S, VT = np.linalg.svd(E)
+    W = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    R, T = [],[]
+    R.append(np.dot(U, np.dot(W, VT)))
+    R.append(np.dot(U, np.dot(W, VT)))
+    R.append(np.dot(U, np.dot(W.T, VT)))
+    R.append(np.dot(U, np.dot(W.T, VT)))
+    T.append(U[:, 2])
+    T.append(-U[:, 2])
+    T.append(U[:, 2])
+    T.append(-U[:, 2])
+
+    # R should always be positive
+    for i in range(len(R)):
+        if (np.linalg.det(R[i]) < 0):
+            R[i] = -R[i]
+            T[i] = -T[i]
+    
+    return R, T
