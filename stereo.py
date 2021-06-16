@@ -231,3 +231,11 @@ def getEpipolarLines(src_final, dst_final, F, im1_epipolar, im2_epipolar, rectif
 
     return lines1, lines2, combined
 
+
+def SSD(mat1, mat2):
+    diff_sq = np.square(mat1 - mat2)
+    ssd = np.sum(diff_sq)
+    return ssd
+
+def SAD(mat1, mat2):
+    return np.sum(abs(mat1 - mat1))
