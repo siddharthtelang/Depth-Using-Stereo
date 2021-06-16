@@ -271,3 +271,199 @@ def calcuateDisparity(img1_rectified_reshaped, img2_rectified_reshaped):
     return disparity
 
 
+
+def Stereo(args):
+    dataset = args['set']
+    if (dataset == 1):
+        K1 = np.array([[5299.313, 0, 1263.818], [0, 5299.313, 977.763], [0, 0, 1]])
+        K2 = np.array([[5299.313, 0, 1438.004], [0, 5299.313, 977.763], [0, 0, 1]])
+        baseline = 177.288
+        f = K1[0,0]
+    elif (dataset == 2):
+        K1 = np.array([[4396.869, 0, 1353.072], [0, 4396.869, 989.702], [0, 0, 1]])
+        K2 = np.array([[4396.869, 0, 1538.86], [0, 4396.869, 989.702], [0, 0, 1]])
+        baseline = 144.049
+        f = K1[0,0]
+    elif (dataset == 3):
+        K1 = np.array([[5806.559, 0, 1429.219], [0, 5806.559, 993.403], [0, 0, 1]])
+        K2 = np.array([[5806.559, 0, 1543.51], [0, 5806.559, 993.403], [0, 0, 1]])
+        baseline = 174.019
+        f = K1[0,0]
+    else:
+        print('Invalid Data Set...Exit')
+        return
+
+    folder = args['full_path']
+    if (not folder[-1] == '/'):
+        folder = folder + '/'
+    img1 = cv2.imread(folder+'im0.png')
+    img2 = cv2.imread(folder+'im1.png')
+    im1 = img1.copy()
+    im2 = img2.copy()
+    img1_gray = cv2.cvtColor(img1,cv2.COLOR_BGR2GRAY)
+    img2_gray = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
+
+    #create SIFT object and get the points
+    print('Matching using SIFT in process')
+    sift = cv2.SIFT_create()
+    kp1, des1 = sift.detectAndCompute(img1_gray,None)
+    kp2, des2 = sift.detectAndCompute(img2_gray,None)
+
+    FLANN_INDEX_KDTREE = 0
+    index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+    search_params = dict(checks = 50)
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    matches = flann.knnMatch(des1,des2,k=2)
+    # store all the good matches as per Lowe's ratio test.
+    good_matches = []
+    for m,n in matches:
+        if m.distance < 0.7*n.distance:
+            good_matches.append(m)
+    #select only 100
+    #good_matches = good_matches[:100]
+    img3 = cv2.drawMatches(img1,kp1,img2,kp2,good_matches,None,flags=2)
+    #plt.imshow(img3)
+    #plt.show()
+    #cv2.imwrite('matches.png', img3)
+
+    # get the points
+    src_pts = np.float32([ kp1[m.queryIdx].pt for m in good_matches ])
+    dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good_matches ])
+
+    # get the F matrix using RANSAC and the inlier points
+    print('Fundamental Matrix is being calculated.....')
+    F, src_final, dst_final = processInliers(src_pts, dst_pts)
+    print('Fundamental Matrix using RANSAC estimation = ')
+    print(F)
+    print('')
+
+    # combine the two images side by side and draw lines
+    comb = np.concatenate((im1, im2), axis=1)
+    s1 = src_final[:,0].astype(int)
+    s2 = src_final[:,1].astype(int)
+    d1 = dst_final[:,0].astype(int)
+    d2 = dst_final[:,1].astype(int)
+    d1 += im1.shape[1]
+    for i in range(s1.shape[0]):
+        cv2.line(comb, (s1[i], s2[i]), (d1[i], d2[i]), (0,0,255), 2)
+    #cv2.imwrite('combined.png', comb)
+    #plt.imshow(comb)
+
+    # get the essential 
+    print('Essential Matrix is being calculated.....')
+    E = getEssentialMatrix(F, K1, K2)
+    print('Essential Matrix = ')
+    print(E)
+    print('')
+
+    #get the Camera pose
+    R1 = np.identity(3)
+    T1 = np.zeros((3,1))
+    print('Camera pose estimation in process')
+    R2, T2 = getCameraPose(E)
+
+    #estimate the 3D points
+    pts_3D = []
+    #reference Rotation, Translation and Projection matrix-
+    R1 = np.identity(3)
+    T1 = np.zeros((3,1))
+    I = np.identity(3)
+    P1 = np.dot(K1, np.dot(R1, np.hstack((I, -T1.reshape(3,1)))))
+
+    for i in range(len(R2)):
+        P2 = np.dot(K2, np.dot(R2[i], np.hstack((I, -T2[i].reshape(3,1)))))
+        X_3D = cv2.triangulatePoints(P1, P2, src_final.T, dst_final.T)
+        pts_3D.append(X_3D)
+
+    #get the correct R2 and T2 index out of 4 values 
+    print('Getting the correct pose')
+    correct_index = (getCorrectPose(pts_3D, R1, T1, R2, T2))[0][0]
+    R2_final = R2[correct_index]
+    T2_final = T2[correct_index]
+    print('Correct R and T Matrix:')
+    print(R2_final)
+    print(T2_final)
+    print('')
+
+    # get the epipolar lins
+    lines1, lines2, epipolarLinesCombined = getEpipolarLines(src_final, dst_final, F, im1.copy(), im2.copy())
+    #plt.imshow(epipolarLinesCombined)
+    #cv2.imwrite('Epipolar_combined.png',epipolarLinesCombined)
+
+    # Rectification
+    _, H1, H2 = cv2.stereoRectifyUncalibrated(np.float32(src_final), np.float32(dst_final), F, imgSize=img1.shape[1::-1])
+    img1_rectified = cv2.warpPerspective(im1, H1, img1.shape[1::-1])
+    img2_rectified = cv2.warpPerspective(im2, H2, img1.shape[1::-1])
+    combined = np.concatenate((img1_rectified, img2_rectified), axis=1)
+    #cv2.imwrite('Rectified Combined.png', combined)
+    #plt.imshow(combined)
+    print('H1 = ',H1)
+    print('H2 = ',H2)
+    print('')
+
+    # get the rectified points
+    src_final_rectified = cv2.perspectiveTransform(src_final.reshape(-1, 1, 2), H1).reshape(-1,2)
+    dst_final_rectified = cv2.perspectiveTransform(dst_final.reshape(-1, 1, 2), H2).reshape(-1,2)
+
+    im1_rectified_with_pts = img1_rectified.copy()
+    im2_rectified_with_pts = img2_rectified.copy()
+
+    im1_rectified = img1_rectified.copy()
+    im2_rectified = img2_rectified.copy()
+
+    #draw the points onto image
+    for i in range(src_final_rectified.shape[0]):
+        cv2.circle(im1_rectified_with_pts, (int(src_final_rectified[i,0]), int(src_final_rectified[i,1])), 10, (0,0,255), 2)
+        cv2.circle(im2_rectified_with_pts, (int(dst_final_rectified[i,0]), int(dst_final_rectified[i,1])), 10, (0,0,255), 2)
+    # cv2.imwrite('Rectified_img1_with_Points.png', im1_rectified_with_pts)
+    # cv2.imwrite('Rectified_img2_with_Points.png', im2_rectified_with_pts)
+    # cv2.imwrite('Rectified_img1.png', im1_rectified)
+    # cv2.imwrite('Rectified_img2.png', im2_rectified)
+
+    # calculate the rectified F matrix
+    H2_T_inv =  np.linalg.inv(H2.T)
+    H1_inv = np.linalg.inv(H1)
+    F_rectified = np.dot(H2_T_inv, np.dot(F, H1_inv))
+
+    img1_rectified_epipolar = im1_rectified.copy()
+    img2_rectified_epipolar = im2_rectified.copy()
+
+    lines1_rectified, lines2_rectified, epipolarLinesCombined_rectified = getEpipolarLines(src_final_rectified, dst_final_rectified, F_rectified, img1_rectified_epipolar, img2_rectified_epipolar, True)
+    #cv2.imwrite('img1_rectified_epipolar.png', img1_rectified_epipolar)
+    #cv2.imwrite('img2_rectified_epipolar.png', img2_rectified_epipolar)
+    #plt.imshow(epipolarLinesCombined_rectified)
+
+    #convert to grayscale and reshape the image
+    img1_rectified_reshaped = cv2.cvtColor(im1_rectified, cv2.COLOR_BGR2GRAY)
+    img1_rectified_reshaped = cv2.resize(img1_rectified_reshaped, (600,400))
+    img2_rectified_reshaped = cv2.cvtColor(im2_rectified, cv2.COLOR_BGR2GRAY)
+    img2_rectified_reshaped = cv2.resize(img2_rectified_reshaped, (600,400))
+
+    # calculate the disparity
+    disparity = calcuateDisparity(img1_rectified_reshaped, img2_rectified_reshaped)
+    #scale it to max 255
+    disparity_map = np.uint8(disparity * (255 / np.max(disparity)))
+    plt.figure('Disparity Map')
+    plt.imshow(disparity_map, cmap='hot',interpolation='nearest')
+    plt.savefig('disparity.png')
+
+    # calculate depth, limit it and rescale to 255
+    depth = (baseline*f) / (disparity_map + 1e-15)
+    print(np.max(depth))
+    depth[depth > 100000] = 100000
+    depth_map = np.uint8(depth * 255 / np.max(depth))
+    plt.figure('Depth Map')
+    plt.imshow(depth_map, cmap='hot', interpolation='nearest')
+    plt.savefig('depth_image.png')
+
+    plt.show()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-dataset", "--set", required=False, help="dataset1/2/3", default='3', type=int)
+    parser.add_argument("-path", "--full_path", required=False, help="working directory of the dataset", default='DataSets/Dataset 3/', type=str)
+    args = vars(parser.parse_args())
+    if (not os.path.exists(args['full_path'])):
+        print('Path does not exist ; Re run and enter correct path as per README')
+        exit()
+    Stereo(args)
