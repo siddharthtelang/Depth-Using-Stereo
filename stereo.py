@@ -101,3 +101,11 @@ def processInliers(src_pts, dst_pts):
             dst_final = dst_pts[final_idx]
     
     return F_Matrix, src_final, dst_final
+
+def getEssentialMatrix(F, K1, K2):
+    E = K2.T.dot(F).dot(K1)
+    #enforce rank 2 for singular matrix
+    U,S,VT = np.linalg.svd(E)
+    S = np.diag([1,1,0])
+    E = np.dot(U, np.dot(S, VT))
+    return E
