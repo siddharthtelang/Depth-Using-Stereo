@@ -239,3 +239,35 @@ def SSD(mat1, mat2):
 
 def SAD(mat1, mat2):
     return np.sum(abs(mat1 - mat1))
+
+def calcuateDisparity(img1_rectified_reshaped, img2_rectified_reshaped):
+    h, w = img1_rectified_reshaped.shape
+    disparity = np.zeros((h, w), np.uint8)
+    window_size = 11
+    half_window_size = math.floor((window_size)/2)
+    search_distance = 200
+
+    for row in tqdm(range(half_window_size, h -  half_window_size)): 
+        for col in range(half_window_size, w -  half_window_size):
+            patch1 = img1_rectified_reshaped[row - half_window_size: row + half_window_size, col - half_window_size : col + half_window_size]
+
+            min_ssd = 10000
+            disp = 0
+            #scan along epiline till a particular length
+            for distance in range(-search_distance, search_distance, 1): #bidirectional
+                c_dash = col + distance
+                # print(c_dash)
+                if (c_dash < w - half_window_size) and (c_dash > half_window_size):
+                    patch2 = img2_rectified_reshaped[row - half_window_size: row + half_window_size, c_dash - half_window_size : c_dash + half_window_size]
+                    # if patch2.shape[1] < 4:
+                    #     print(r, c, c_dash)
+                    ssd = SSD(patch1, patch2)
+                    if ssd < min_ssd:
+                        min_ssd = ssd
+                        disp = np.abs(distance)
+
+            disparity[row, col] = disp
+
+    return disparity
+
+
