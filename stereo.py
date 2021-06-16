@@ -72,3 +72,32 @@ def calculateError(x1, x2, F):
     #calculate the error, the ideal case should be zero for the below product
     error = np.dot(x2_.T, np.dot(F, x1_))
     return np.abs(error)
+
+# https://cmsc733.github.io/2019/proj/p3/
+def processInliers(src_pts, dst_pts):
+    max_error = 0.001
+    iterations = 1
+    final_idx = []
+    F_Matrix = None
+    inliers = 0
+    rows = src_pts.shape[0]
+    for i in range(2000):
+        temp_idx = []
+        random_row = np.random.choice(rows, size=8)
+        src = src_pts[random_row]
+        dst = dst_pts[random_row]
+        f_matrix = getFundamentalMatrix(src, dst)
+        #now check the F matrix for all pairs
+        for j in range(rows):
+            error = calculateError(src_pts[j], dst_pts[j], f_matrix)
+            if error < max_error:
+                temp_idx.append(j)
+        
+        if len(temp_idx) > inliers:
+            inliers = len(temp_idx)
+            final_idx = temp_idx
+            F_Matrix = f_matrix
+            src_final = src_pts[final_idx]
+            dst_final = dst_pts[final_idx]
+    
+    return F_Matrix, src_final, dst_final
