@@ -131,3 +131,47 @@ def getCameraPose(E):
             T[i] = -T[i]
     
     return R, T
+
+def getCorrectPose(pts_3D, R1, T1, R2, T2):
+    num_Z_positive = 0
+    zList = []
+    I = np.identity(3)
+    for k in range (len(pts_3D)):
+        num_Z_positive = 0
+        pts3D = pts_3D[k]
+        #normalize
+        pts3D = pts3D/pts3D[3, :]
+
+        P_2 = np.dot(R2[k], np.hstack((I, -T2[k].reshape(3,1))))
+        P_2 = np.vstack((P_2, np.array([0,0,0,1]).reshape(1,4)))
+
+        P_1 = np.dot(R1, np.hstack((I, -T1.reshape(3,1))))
+        P_1 = np.vstack((P_1, np.array([0,0,0,1]).reshape(1,4)))
+
+        for i in range(pts3D.shape[1]):
+            #calculate point for Right image
+            X_2 = pts3D[:,i]
+            X_2 = X_2.reshape(4,1)
+            Xc_2 = np.dot(P_2, X_2)
+            Xc_2 = Xc_2 / Xc_2[3]
+            z_2 = Xc_2[2]
+
+            #calcuate points for Left image
+            X_1 = pts3D[:,i]
+            X_1 = X_1.reshape(4,1)
+            Xc_1 = np.dot(P_1, X_1)
+            Xc_1 = Xc_1 / Xc_1[3]
+            z_1 = Xc_1[2]
+
+            if (z_1 > 0 and z_2 > 0):
+                num_Z_positive += 1
+
+        #print(num_Z_positive)
+        zList.append(num_Z_positive)
+
+        # get the correct camera pose index - define threshold for points as half the number of points
+        threshold = pts_3D[0].shape[1]//2
+        zArray = np.array(zList)
+        index = np.where(zArray > threshold)
+
+    return index
